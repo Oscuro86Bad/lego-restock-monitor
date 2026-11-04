@@ -3,7 +3,12 @@ name: LEGO Restock Monitor
 on:
   schedule:
     - cron: "*/5 * * * *"   # ogni 5 minuti (orario UTC)
-  workflow_dispatch: {}       # permette "Run workflow" manuale per testare
+  workflow_dispatch:
+    inputs:
+      test_message:
+        description: "Invia un messaggio di TEST a Telegram"
+        type: boolean
+        default: false
 
 jobs:
   check:
@@ -26,4 +31,6 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # true solo quando lanciato a mano col flag "test_message"
+          TEST_MESSAGE: ${{ github.event.inputs && (github.event.inputs.test_message || 'false') || 'false' }}
         run: pwsh -NoProfile -File ./monitor.ps1
