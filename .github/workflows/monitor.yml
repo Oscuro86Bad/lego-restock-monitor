@@ -1,0 +1,29 @@
+name: LEGO Restock Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # ogni 5 minuti (orario UTC)
+  workflow_dispatch: {}       # permette "Run workflow" manuale per testare
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Recupera lo stato del ciclo precedente (baseline / "già avvisato")
+      - name: Restore state
+        uses: actions/cache@v4
+        with:
+          path: state.json
+          # chiave unica per run; il prefisso serve a ripristinare l'ultima versione salvata
+          key: lego-restock-76294-${{ github.run_id }}
+          restore-keys: |
+            lego-restock-76294-
+
+      - name: Check availability
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pwsh -NoProfile -File ./monitor.ps1
