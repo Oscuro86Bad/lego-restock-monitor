@@ -1,0 +1,26 @@
+name: Keep alive
+
+# GitHub disattiva automaticamente i workflow schedulati dopo 60 giorni
+# senza alcuna attivita' nel repository.
+# Questo workflow fa un commit vuoto una volta al mese per mantenere
+# il monitoraggio attivo in modo permanente.
+
+on:
+  schedule:
+    - cron: "0 9 1 * *"   # il 1o di ogni mese alle 09:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Empty commit
+        run: |
+          git config user.name "keepalive-bot"
+          git config user.email "keepalive@users.noreply.github.com"
+          git commit --allow-empty -m "chore: keepalive scheduled monitor"
+          git push
