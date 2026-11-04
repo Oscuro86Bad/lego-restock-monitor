@@ -27,6 +27,13 @@ function Send-Telegram {
 
 Write-Log "--- Controllo $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC ---"
 
+# Modalita' test: invia messaggio di prova via Telegram ed esce
+if ($env:TEST_MESSAGE -eq "true") {
+    $sent = Send-Telegram "TEST invio: il monitoraggio LEGO (76294 X-Men: X-Mansion) e' attivo e funzionante. Quando il set torna disponibile, riceverai l'avviso qui."
+    if ($sent) { Write-Log "TEST MESSAGE INVIATO CORRETTAMENTE." } else { Write-Log "TEST MESSAGE: invio fallito, controllare i secrets." }
+    exit 0
+}
+
 $query = @"
 { product(slug: "$ProductSlug") {
   name
