@@ -1,0 +1,27 @@
+name: Vinted Listings Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # ogni 5 minuti (orario UTC)
+  workflow_dispatch: {}
+
+jobs:
+  vinted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore listings state
+        uses: actions/cache@v4
+        with:
+          path: vinted-state.json
+          key: vinted-listings-76294-${{ github.run_id }}
+          restore-keys: |
+            vinted-listings-76294-
+
+      - name: Check Vinted new listings
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pwsh -NoProfile -File ./vinted.ps1
