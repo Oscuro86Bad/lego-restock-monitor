@@ -86,15 +86,25 @@ foreach ($s in $Searches) {
     if ($baselined -contains $term) {
         # ricerca gia' attiva: notifica solo annunci nuovi
         $news = @($ids | Where-Object { $known -notcontains $_ })
+        if ($news.Count -gt 0) {
+            # CLAIM ANTICIPATO: registra gli id PRIMA dell'invio Telegram.
+            # Una eventuale esecuzione concorrente con lo stesso stato li vedra'
+            # gia' gestiti e NON notifichera' (anti-doppio).
+            $known = @($known) + @($news)
+            @{ seenIds = $known; baselinedTerms = $baselined } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
+        }
         foreach ($id in $news) {
             $it = $foundItems[$id]
             $sent = Send-Telegram "<b>Nuovo annuncio Vinted</b> ($term): $($it.title)
 Prezzo: $($it.price) euro
 Link: https://www.vinted.it/items/$id"
             if ($sent) {
-                $known += $id
                 $notifiedCount++
                 Write-Log "Notificato $id ($term)"
+            } else {
+                # invio fallito: rimuovi il claim per riprovarci al prossimo giro
+                $known = @($known | Where-Object { $_ -ne $id })
+                @{ seenIds = $known; baselinedTerms = $baselined } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
             }
         }
     } else {
