@@ -31,6 +31,7 @@ function Send-Telegram {
 Write-Log "--- Vinted scan $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC ---"
 
 $foundItems = @{}
+$termIds = @{}   # termine di ricerca -> ids di quell'annuncio in quella ricerca
 
 foreach ($s in $Searches) {
     try {
@@ -40,7 +41,12 @@ foreach ($s in $Searches) {
         $anchors = [regex]::Matches($c, 'data-testid="product-item-id-(\d+)"')
         foreach ($a in $anchors) {
             $id = $a.Groups[1].Value
-            if ($foundItems.ContainsKey($id)) { continue }
+            if (-not $termIds.ContainsKey($s.term)) { $termIds[$s.term] = @() }
+            if ($foundItems.ContainsKey($id)) {
+                # id gia' visto in un'altra ricerca: solo registro per il termine
+                if ($termIds[$s.term] -notcontains $id) { $termIds[$s.term] = @($termIds[$s.term]) + $id }
+                continue
+            }
             $winSize = [Math]::Min(4000, $c.Length - $a.Index)
             $win = $c.Substring($a.Index, $winSize)
             $t = [regex]::Match($win, 'alt="([^"]{5,200})"')
@@ -49,6 +55,7 @@ foreach ($s in $Searches) {
             $titolo = ($alt -split ',\s*(?:Condizioni|Marca|Brand)').Trim()
             $prezzo = [regex]::Match($alt, '(\d{1,6}[\.,]\d{2})').Groups[1].Value
             $foundItems[$id] = @{ title = $titolo; price = $prezzo }
+            $termIds[$s.term] = @($termIds[$s.term]) + $id
         }
         Write-Log "Ricerca '$($s.term)': $($anchors.Count) item."
     } catch {
@@ -59,29 +66,45 @@ foreach ($s in $Searches) {
 $allIds = @($foundItems.Keys)
 Write-Log "Totale item validi: $($allIds.Count)"
 
-# ---- Baseline primo run: registra e non notifica ----
+# ---- Baseline completamente primo run: registra e non notifica ----
 if (-not (Test-Path $StateFile)) {
-    @{ seenIds = $allIds } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
+    @{ seenIds = $allIds; baselinedTerms = @($Searches | ForEach-Object { $_.term }) } |
+        ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
     Write-Log "Baseline salvata: $($allIds.Count) annunci gia' online, nessuna notifica."
     exit 0
 }
 
 $state = Get-Content $StateFile -Raw | ConvertFrom-Json
 $known = @($state.seenIds)
-$news = @($allIds | Where-Object { $known -notcontains $_ })
-Write-Log "Delta: $($news.Count) nuovi annunci."
+$baselined = @($state.baselinedTerms)
+if (-not $state.baselinedTerms) { $baselined = @() }
 
-foreach ($id in $news) {
-    $it = $foundItems[$id]
-    $sent = Send-Telegram "<b>Nuovo annuncio Vinted</b>: $($it.title)
+$notifiedCount = 0
+foreach ($s in $Searches) {
+    $term = $s.term
+    $ids = @(); if ($termIds.ContainsKey($term)) { $ids = @($termIds[$term]) }
+    if ($baselined -contains $term) {
+        # ricerca gia' attiva: notifica solo annunci nuovi
+        $news = @($ids | Where-Object { $known -notcontains $_ })
+        foreach ($id in $news) {
+            $it = $foundItems[$id]
+            $sent = Send-Telegram "<b>Nuovo annuncio Vinted</b> ($term): $($it.title)
 Prezzo: $($it.price) euro
 Link: https://www.vinted.it/items/$id"
-    if ($sent) {
-        $known += $id
-        Write-Log "Notificato $id"
+            if ($sent) {
+                $known += $id
+                $notifiedCount++
+                Write-Log "Notificato $id ($term)"
+            }
+        }
+    } else {
+        # NUOVA ricerca: baseline silenziosa (registra tutto senza notificare)
+        foreach ($id in $ids) { if ($known -notcontains $id) { $known += $id } }
+        $baselined += $term
+        Write-Log "Baseline silenziosa per '$term': $($ids.Count) annunci registrati senza notifiche."
     }
 }
 
 if ($known.Count -gt 800) { $known = $known | Select-Object -Last 800 }
-@{ seenIds = $known } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
-Write-Log "Stato aggiornato: $($known.Count) id in memoria."
+@{ seenIds = $known; baselinedTerms = $baselined } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
+Write-Log "Stato aggiornato: $($known.Count) id in memoria. Notificati in questo giro: $notifiedCount."
