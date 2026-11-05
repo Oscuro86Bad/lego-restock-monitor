@@ -1,0 +1,28 @@
+name: eBay Listings Monitor
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # ogni 10 minuti (orario UTC)
+  workflow_dispatch: {}
+
+jobs:
+  ebay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore listings state
+        uses: actions/cache@v4
+        with:
+          path: ebay-state.json
+          key: ebay-listings-76294-${{ github.run_id }}
+          restore-keys: |
+            ebay-listings-76294-
+
+      - name: Check eBay new listings
+        env:
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pwsh -NoProfile -File ./ebay.ps1
