@@ -77,13 +77,19 @@ if (-not (Test-Path $StateFile)) {
 $state = Get-Content $StateFile -Raw | ConvertFrom-Json
 
 if ($canBuy -and -not $state.alerted) {
+    # CLAIM ANTICIPATO: segna "alerted" PRIMA dell'invio per evitare doppi
+    # (esecuzioni concorrenti vedrebbero lo stato gia' avvisato e non ripeterebbero)
+    @{ alerted = $true } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
     $msg = "<b>GREAT NEWS!</b> Il set LEGO <b>$name (76294)</b> e' <b>tornato disponibile</b>!"
     $msg += "`nPrezzo: $($v.price.formattedAmount)"
     $msg += "`nLink: $ProductUrl"
     $sent = Send-Telegram $msg
     if ($sent) {
-        @{ alerted = $true } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
         Write-Log "AVVISO INVIATO."
+    } else {
+        # invio fallito: riarma la notifica per il prossimo giro
+        @{ alerted = $false } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
+        Write-Log "Invio fallito: ritento al prossimo ciclo."
     }
     exit 0
 }
