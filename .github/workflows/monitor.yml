@@ -13,7 +13,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -34,3 +34,16 @@ jobs:
           # true solo quando lanciato a mano col flag "test_message"
           TEST_MESSAGE: ${{ github.event.inputs && (github.event.inputs.test_message || 'false') || 'false' }}
         run: pwsh -NoProfile -File ./monitor.ps1
+
+      # GitHub rallenta i cron schedulati: auto-lancio del run successivo (~5 min reali)
+      - name: Loop (next check in ~4 min)
+        env:
+          TRIGGER_TOKEN: ${{ secrets.SELF_TRIGGER_TOKEN }}
+        run: |
+          sleep 240
+          curl -s -X POST \
+            -H "Authorization: token $TRIGGER_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/monitor.yml/dispatches" \
+            -d '{"ref":"main"}' > /dev/null
+          echo "Prossima verifica programmata."
