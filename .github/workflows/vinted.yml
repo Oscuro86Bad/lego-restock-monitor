@@ -1,0 +1,45 @@
+name: Vinted Listings Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # fallback (GitHub lo rallenta, il loop self-dispatch fa il ritmo reale)
+  workflow_dispatch: {}
+
+concurrency:
+  group: vinted-listings-monitor
+  cancel-in-progress: false
+
+jobs:
+  vinted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore listings state
+        uses: actions/cache@v4
+        with:
+          path: vinted-state.json
+          key: vinted-listings-76294-${{ github.run_id }}
+          restore-keys: |
+            vinted-listings-76294-
+
+      - name: Check Vinted new listings
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pwsh -NoProfile -File ./vinted.ps1
+
+      # GitHub rallenta i cron schedulati: qui auto-lanciamo il run successivo
+      # dopo ~4 min, in modo che ogni verifica avvenga a distanza ~5 min reali.
+      - name: Loop (next check in ~4 min)
+        env:
+          TRIGGER_TOKEN: ${{ secrets.SELF_TRIGGER_TOKEN }}
+        run: |
+          sleep 240
+          curl -s -X POST \
+            -H "Authorization: token $TRIGGER_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/vinted.yml/dispatches" \
+            -d '{"ref":"main"}' > /dev/null
+          echo "Prossima verifica programmata."
