@@ -1,5 +1,5 @@
 # Vinted Listings Monitor - GitHub Actions (cloud, 24/7)
-# Ricerche: "76294" e "lego x-mansion" — notifica Telegram per annunci nuovi.
+# Ricerche: "76294" e "lego x-mansion" â notifica Telegram per annunci nuovi.
 # Lo stato ( annunci gia' visti ) si tiene nel cache del workflow.
 
 $ErrorActionPreference = "Stop"
@@ -8,7 +8,8 @@ $Searches = @(
     @{ term = "76294" },
     @{ term = "21302" },
     @{ term = "lego x-mansion" },
-    @{ term = "76352" }
+    @{ term = "76352" },
+    @{ term = "31199" }
 )
 $StateFile = "./vinted-state.json"
 $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
