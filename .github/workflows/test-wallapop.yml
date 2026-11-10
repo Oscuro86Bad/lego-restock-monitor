@@ -1,0 +1,69 @@
+name: Wallapop Test (temporaneo)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-subito
+          restore-keys: |
+            playwright-chromium-subito
+
+      - name: Installa Playwright
+        run: |
+          npm init -y > /dev/null
+          npm install playwright@latest --silent
+          npx playwright install --with-deps chromium > /dev/null 2>&1
+
+      - name: Ricerca wallapop con browser
+        run: |
+          cat > test.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({
+              headless: true,
+              args: ['--disable-blink-features=AutomationControlled']
+            });
+            const ctx = await browser.newContext({
+              locale: 'es-ES',
+              viewport: { width: 1366, height: 850 }
+            });
+            const page = await ctx.newPage();
+            try {
+              await page.goto('https://es.wallapop.com/search?keywords=76294', { waitUntil: 'domcontentloaded', timeout: 60000 });
+              // attende le card prodotto (link /item/)
+              await page.waitForSelector('a[href*="/item/"]', { timeout: 45000 }).catch(() => {});
+              await page.waitForTimeout(5000);
+              console.log('Title:', await page.title());
+              const items = await page.$$eval('a[href*="/item/"]', els => els.slice(0, 10).map(e => ({
+                href: e.getAttribute('href'),
+                text: (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120)
+              })));
+              console.log('Card trovate:', items.length);
+              items.forEach(i => console.log('  ', i.href, '|', i.text));
+              // chiama l'API dall'interno della pagina (sessione/device del browser)
+              const api = await page.evaluate(async () => {
+                const r = await fetch('https://api.wallapop.com/api/v3/search/section?keywords=76294&source=deep_link&order_by=most_relevance', { headers: { accept: 'application/json' } });
+                const j = await r.json();
+                return { status: r.status, n: j.data && j.data.section && j.data.section.items ? j.data.section.items.length : 0, first: j.data && j.data.section && j.data.section.items ? j.data.section.items.slice(0, 3).map(i => i.id + ' | ' + i.title + ' | ' + i.price.amount) : j };
+              });
+              console.log('API da browser:', JSON.stringify(api, null, 1));
+            } catch (e) {
+              console.log('ERRORE: ' + e.message);
+            }
+            await browser.close();
+          })();
+          EOF
+          node test.js
