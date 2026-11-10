@@ -1,4 +1,4 @@
-﻿# Subito.it Listings Monitor - GitHub Actions (cloud, 24/7)
+# Subito.it Listings Monitor - GitHub Actions (cloud, 24/7)
 # Ricerche gestite dall'app Android (tab Subito): legge il blocco $Searches.
 # NOTA ROTTA: subito.it ora redirige la vecchia /annunci-italia/vendita/?q=
 # su /annunci-italia/vendita/usato/ BUTTANDO la query. La rotta corretta e'
@@ -13,7 +13,8 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 $Searches = @(
     @{ term = "76294" },
     @{ term = "lego x-mansion" },
-    @{ term = "76352" }
+    @{ term = "76352" },
+    @{ term = "21302" }
 )
 $SearchUrl = "https://www.subito.it/annunci-italia/vendita/usato/?q={0}"
 $StateFile = "./subito-state.json"
