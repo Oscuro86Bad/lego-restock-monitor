@@ -1,0 +1,37 @@
+name: Subito Test (temporaneo)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prova accesso Subito.it
+        run: |
+          pwsh -NoProfile -Command '
+            $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+            foreach ($q in @("lego+x+mansion", "76294")) {
+              Write-Host "--- QUERY: $q ---"
+              try {
+                $r = Invoke-WebRequest -Uri "https://www.subito.it/annunci-italia/vendita/?q=$q" -Headers @{ "User-Agent" = $UA; "Accept-Language" = "it-IT,it;q=0.9" } -UseBasicParsing -TimeoutSec 60
+                $c = $r.Content
+                Write-Host "HTTP $($r.StatusCode), $($c.Length) caratteri"
+                $m = [regex]::Match($c, "<title>([^<]+)</title>")
+                Write-Host "Title: $($m.Groups[1].Value)"
+                $j = [regex]::Match($c, "<script id=\""`__NEXT_DATA`"\""` type=\""`application/json`"\""`>(.*?)</script>").Groups[1].Value
+                if ($j) {
+                  $o = $j | ConvertFrom-Json
+                  $items = $o.props.pageProps.initialState.items
+                  Write-Host "total: $($items.total) / totalPages: $($items.totalPages)"
+                  Write-Host "originalList: $($items.originalList.Count)"
+                  $q2 = $o.props.pageProps.initialState.search.query
+                  Write-Host "query registrata: $($q2 | ConvertTo-Json -Compress)"
+                } else { Write-Host "NEXT_DATA assente" }
+                Write-Host "occorrenze query nel titolo/lista: verifica manuale"
+              } catch {
+                Write-Host "ERRORE: $($_.Exception.Message)"
+              }
+            }
+          '
