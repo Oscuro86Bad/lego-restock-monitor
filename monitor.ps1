@@ -1,6 +1,7 @@
 # LEGO Restock Monitor - versione per GitHub Actions
 # Controlla la disponibilita' del set 76294 su LEGO.com Shop IT
-# e invia un messaggio Telegram quando torna acquistabile.
+# e invia un messaggio Telegram a OGNI cambio di stato:
+# "GREAT NEWS!" quando torna acquistabile, "ATTENZIONE" quando torna terminato.
 # Le credenziali arrivano dai secrets TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID.
 
 $ErrorActionPreference = "Stop"
@@ -69,34 +70,55 @@ try {
 
 # Baseline: primo run (nessuno stato salvato) => salva e non avvisa
 if (-not (Test-Path $StateFile)) {
-    @{ alerted = $false } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
+    $lastNote = if ($canBuy) { "avail" } else { "out" }
+    @{ lastNotified = $lastNote } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
     Write-Log "Baseline iniziale salvata."
     exit 0
 }
 
 $state = Get-Content $StateFile -Raw | ConvertFrom-Json
 
-if ($canBuy -and -not $state.alerted) {
-    # CLAIM ANTICIPATO: segna "alerted" PRIMA dell'invio per evitare doppi
+# Migrazione automatica dal vecchio schema ({alerted: bool}) al nuovo ({lastNotified: "avail"|"out"})
+if (-not ($state.PSObject.Properties.Name -contains "lastNotified")) {
+    $legacy = if ($state.alerted) { "avail" } else { "out" }
+    @{ lastNotified = $legacy } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
+    $state = Get-Content $StateFile -Raw | ConvertFrom-Json
+    Write-Log "Stato migrato allo schema lastNotified: $legacy"
+}
+
+# Transizione DISPONIBILE: notifica se l'ultimo avviso non era gia' "avail"
+if ($canBuy -and $state.lastNotified -ne "avail") {
+    $prev = $state.lastNotified
+    # CLAIM ANTICIPATO: segna l'invio PRIMA di inviarlo per evitare doppi
     # (esecuzioni concorrenti vedrebbero lo stato gia' avvisato e non ripeterebbero)
-    @{ alerted = $true } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
+    @{ lastNotified = "avail" } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
     $msg = "<b>GREAT NEWS!</b> Il set LEGO <b>$name (76294)</b> e' <b>tornato disponibile</b>!"
     $msg += "`nPrezzo: $($v.price.formattedAmount)"
     $msg += "`nLink: $ProductUrl"
     $sent = Send-Telegram $msg
     if ($sent) {
-        Write-Log "AVVISO INVIATO."
+        Write-Log "AVVISO DISPONIBILE INVIATO."
     } else {
-        # invio fallito: riarma la notifica per il prossimo giro
-        @{ alerted = $false } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
+        # invio fallito: ripristina lo stato precedente e ritenta al prossimo giro
+        @{ lastNotified = $prev } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
         Write-Log "Invio fallito: ritento al prossimo ciclo."
     }
     exit 0
 }
 
-if (-not $canBuy -and $state.alerted) {
-    @{ alerted = $false } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
-    Write-Log "Stato tornato indisponibile: notifica riarmata."
+# Transizione TERMINATO: ora notifica SEMPRE il cambio di stato
+if (-not $canBuy -and $state.lastNotified -ne "out") {
+    $prev = $state.lastNotified
+    @{ lastNotified = "out" } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
+    $msg = "<b>ATTENZIONE</b>: il set LEGO <b>$name (76294)</b> e' tornato <b>TERMINATO</b>."
+    $msg += "`nAl prossimo restock arrivera' di nuovo l'avviso <b>GREAT NEWS!</b>"
+    $sent = Send-Telegram $msg
+    if ($sent) {
+        Write-Log "AVVISO TERMINATO INVIATO."
+    } else {
+        @{ lastNotified = $prev } | ConvertTo-Json | Set-Content -Path $StateFile -Encoding utf8
+        Write-Log "Invio fallito: ritento al prossimo ciclo."
+    }
     exit 0
 }
 
