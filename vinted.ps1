@@ -7,7 +7,8 @@ $ErrorActionPreference = "Stop"
 $Searches = @(
     @{ term = "21302" },
     @{ term = "76352" },
-    @{ term = "31199" }
+    @{ term = "31199" },
+    @{ term = "6866" }
 )
 $StateFile = "./vinted-state.json"
 $MaxNotPerRun = 20   # anti-spam: massimo notifiche per giro (il resto slitta al giro dopo)
