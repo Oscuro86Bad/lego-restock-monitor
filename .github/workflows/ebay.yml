@@ -29,6 +29,8 @@ jobs:
           TRIGGER_TOKEN: ${{ secrets.TRIGGER_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_CERT: ${{ secrets.EBAY_CLIENT_CERT }}
         run: pwsh -NoProfile -File ./ebay-monitor.ps1
 
       # GitHub rallenta i cron schedulati: auto-lancio del run successivo (~5 min reali)
