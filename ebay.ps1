@@ -1,5 +1,6 @@
 # eBay Listings Monitor - ricerche gestite dall'app Android
 
 $Searches = @(
-    @{ term = "6866" }
+    @{ term = "6866" },
+    @{ term = "76294" }
 )
