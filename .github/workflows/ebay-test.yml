@@ -1,0 +1,49 @@
+name: eBay API Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test OAuth token + Browse API
+        env:
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_CERT: ${{ secrets.EBAY_CLIENT_CERT }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pair = "${env:EBAY_CLIENT_ID}:${env:EBAY_CLIENT_CERT}"
+          $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair))
+          try {
+            $r = Invoke-RestMethod -Uri "https://api.ebay.com/identity/v2/oauth2/token" -Method Post `
+              -Headers @{ "Authorization" = "Basic $b64" } `
+              -ContentType "application/x-www-form-urlencoded" `
+              -Body "grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope"
+            Write-Host "TOKEN OK (scadenza $($r.expires_in) s)"
+            $tok = $r.access_token
+          } catch {
+            Write-Host "TOKEN KO: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              $sr = New-Object IO.StreamReader($_.Exception.Response.GetResponseStream())
+              Write-Host ("Body: " + $sr.ReadToEnd())
+            }
+            exit 1
+          }
+          try {
+            $h = @{ "Authorization" = "Bearer $tok"; "Accept" = "application/json" }
+            $q = [uri]::EscapeDataString("lego 76294")
+            $b = Invoke-RestMethod -Uri "https://api.ebay.com/buy/browse/v1/item_summary/search?q=$q&limit=5&sort=newlyListed" -Headers $h
+            Write-Host "BROWSE OK - totali: $($b.total)"
+            foreach ($s in $b.itemSummaries) {
+              Write-Host ("- {0} | {1} | {2} {3} | inizio: {4}" -f $s.itemId, $s.title.Substring(0,[Math]::Min(50,$s.title.Length)), $s.price.value, $s.price.currency, $s.itemCreationDate)
+            }
+          } catch {
+            Write-Host "BROWSE KO: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              $sr = New-Object IO.StreamReader($_.Exception.Response.GetResponseStream())
+              Write-Host ("Body: " + $sr.ReadToEnd())
+            }
+            exit 1
+          }
