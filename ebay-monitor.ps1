@@ -45,19 +45,25 @@ if (-not $Searches -or @($Searches).Count -eq 0) {
 }
 Write-Log "Ricerche da app: $(@($Searches).Count)"
 
-# ---- credenziali dal repo privato (salvate dall'app Fallen, tab eBay) ----
-try {
-    $ghHeaders = @{
-        Authorization = "token $env:TRIGGER_TOKEN"
-        Accept        = "application/vnd.github+json"
-        "User-Agent"  = "ebay-monitor"
+# ---- credenziali: prima i secrets (EBAY_CLIENT_ID/EBAY_CLIENT_CERT), poi il repo privato ----
+$ebayCfg = $null
+if ($env:EBAY_CLIENT_ID -and $env:EBAY_CLIENT_CERT) {
+    $ebayCfg = [pscustomobject]@{ clientId = $env:EBAY_CLIENT_ID; clientSecret = $env:EBAY_CLIENT_CERT }
+    Write-Log "Credenziali da secrets EBAY_CLIENT_ID/EBAY_CLIENT_CERT."
+} else {
+    try {
+        $ghHeaders = @{
+            Authorization = "token $env:TRIGGER_TOKEN"
+            Accept        = "application/vnd.github+json"
+            "User-Agent"  = "ebay-monitor"
+        }
+        $cfgRaw = Invoke-RestMethod -Uri "https://api.github.com/repos/$ConfigRepo/contents/ebay.json" -Headers $ghHeaders -TimeoutSec 30
+        $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($cfgRaw.content -replace "\s", "")))
+        $ebayCfg = $json | ConvertFrom-Json
+    } catch {
+        Write-Log "ERRORE lettura ebay.json da $ConfigRepo : $($_.Exception.Message)"
+        exit 0
     }
-    $cfgRaw = Invoke-RestMethod -Uri "https://api.github.com/repos/$ConfigRepo/contents/ebay.json" -Headers $ghHeaders -TimeoutSec 30
-    $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($cfgRaw.content -replace "\s", "")))
-    $ebayCfg = $json | ConvertFrom-Json
-} catch {
-    Write-Log "ERRORE lettura ebay.json da $ConfigRepo : $($_.Exception.Message)"
-    exit 0
 }
 if (-not $ebayCfg.clientId -or -not $ebayCfg.clientSecret) {
     Write-Log "ebay.json incompleto (clientId/clientSecret mancanti): apri l'app Fallen, tab eBay, e salva le credenziali."
