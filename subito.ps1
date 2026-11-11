@@ -11,8 +11,6 @@ $ErrorActionPreference = "Stop"
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 
 $Searches = @(
-    @{ term = "76294" },
-    @{ term = "lego x-mansion" },
     @{ term = "76352" },
     @{ term = "21302" }
 )
