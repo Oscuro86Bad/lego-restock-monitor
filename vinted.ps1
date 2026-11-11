@@ -10,6 +10,7 @@ $Searches = @(
     @{ term = "31199" }
 )
 $StateFile = "./vinted-state.json"
+$MaxNotPerRun = 20   # anti-spam: massimo notifiche per giro (il resto slitta al giro dopo)
 $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
 
 function Write-Log { param([string]$m); Write-Output $m }
@@ -32,6 +33,7 @@ Write-Log "--- Vinted scan $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC ---"
 
 $foundItems = @{}
 $termIds = @{}   # termine di ricerca -> ids di quell'annuncio in quella ricerca
+$okTerms = @()   # termini con almeno 1 annuncio trovato in QUESTO giro
 
 foreach ($s in $Searches) {
     try {
@@ -57,6 +59,7 @@ foreach ($s in $Searches) {
             $foundItems[$id] = @{ title = $titolo; price = $prezzo }
             $termIds[$s.term] = @($termIds[$s.term]) + $id
         }
+        if ($termIds.ContainsKey($s.term) -and @($termIds[$s.term]).Count -gt 0) { $okTerms = @($okTerms) + $s.term }
         Write-Log "Ricerca '$($s.term)': $($anchors.Count) item."
     } catch {
         Write-Log "ERRORE ricerca '$($s.term)': $($_.Exception.Message)"
@@ -67,10 +70,13 @@ $allIds = @($foundItems.Keys)
 Write-Log "Totale item validi: $($allIds.Count)"
 
 # ---- Baseline completamente primo run: registra e non notifica ----
+# NOTA: baseliniamo SOLO i termini che hanno effettivamente restituito annunci:
+# un termine fallito (es. Vinted bloccato) NON va baselinato a vuoto, altrimenti
+# al giro dopo TUTTI i suoi annunci risultano "nuovi" e spamma Telegram.
 if (-not (Test-Path $StateFile)) {
-    @{ seenIds = $allIds; baselinedTerms = @($Searches | ForEach-Object { $_.term }) } |
+    @{ seenIds = $allIds; baselinedTerms = $okTerms } |
         ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
-    Write-Log "Baseline salvata: $($allIds.Count) annunci gia' online, nessuna notifica."
+    Write-Log "Baseline salvata: $($allIds.Count) annunci gia' online, nessuna notifica (termini baseline: $($okTerms.Count))."
     exit 0
 }
 
@@ -86,32 +92,47 @@ foreach ($s in $Searches) {
     if ($baselined -contains $term) {
         # ricerca gia' attiva: notifica solo annunci nuovi
         $news = @($ids | Where-Object { $known -notcontains $_ })
-        if ($news.Count -gt 0) {
-            # CLAIM ANTICIPATO: registra gli id PRIMA dell'invio Telegram.
-            # Una eventuale esecuzione concorrente con lo stesso stato li vedra'
-            # gia' gestiti e NON notifichera' (anti-doppio).
-            $known = @($known) + @($news)
-            @{ seenIds = $known; baselinedTerms = $baselined } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
-        }
-        foreach ($id in $news) {
-            $it = $foundItems[$id]
-            $sent = Send-Telegram "<b>Nuovo annuncio Vinted</b> ($term): $($it.title)
+        if ($news.Count -gt $MaxNotPerRun) {
+            # TROPPI "nuovi" in un solo giro per una ricerca gia' baseline:
+            # quasi certamente lo stato si e' perduto/rigenerato (cache evasa).
+            # Re-baseline silenziosa: ZERO notifiche, anti-spam.
+            Write-Log "ATTENZIONE: $($news.Count) nuovi per '$term' su ricerca gia' baseline: probabile perdita di stato -> re-baseline silenziosa, nessuna notifica."
+            foreach ($id in $news) { if ($known -notcontains $id) { $known += $id } }
+        } else {
+            foreach ($id in $news) {
+                if ($notifiedCount -ge $MaxNotPerRun) {
+                    Write-Log "LIMITE $MaxNotPerRun notifiche/giro: '$id' slitta al prossimo giro."
+                    continue
+                }
+                # CLAIM del singolo id PRIMA dell'invio Telegram (anti-doppio)
+                $known = @($known) + $id
+                @{ seenIds = $known; baselinedTerms = $baselined } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
+                $it = $foundItems[$id]
+                $sent = Send-Telegram "<b>Nuovo annuncio Vinted</b> ($term): $($it.title)
 Prezzo: $($it.price) euro
 Link: https://www.vinted.it/items/$id"
-            if ($sent) {
-                $notifiedCount++
-                Write-Log "Notificato $id ($term)"
-            } else {
-                # invio fallito: rimuovi il claim per riprovarci al prossimo giro
-                $known = @($known | Where-Object { $_ -ne $id })
-                @{ seenIds = $known; baselinedTerms = $baselined } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
+                if ($sent) {
+                    $notifiedCount++
+                    Write-Log "Notificato $id ($term)"
+                } else {
+                    # invio fallito: rimuovi il claim per riprovarci al prossimo giro
+                    $known = @($known | Where-Object { $_ -ne $id })
+                    @{ seenIds = $known; baselinedTerms = $baselined } | ConvertTo-Json -Depth 3 | Set-Content -Path $StateFile -Encoding utf8
+                }
             }
         }
     } else {
-        # NUOVA ricerca: baseline silenziosa (registra tutto senza notificare)
-        foreach ($id in $ids) { if ($known -notcontains $id) { $known += $id } }
-        $baselined += $term
-        Write-Log "Baseline silenziosa per '$term': $($ids.Count) annunci registrati senza notifiche."
+        # NUOVA ricerca: baseline silenziosa SOLO se ha trovato almeno 1 annuncio.
+        # Se la fetch e' fallita o ha dato 0 risultati (Vinted bloccato/rallentato in
+        # quel giro), NON la baseline: resta silenziosa nei prossimi giri finche'
+        # non vedra' il primo annuncio. Cosi' non puo' mai notificare annunci vecchi.
+        if ($ids.Count -gt 0) {
+            foreach ($id in $ids) { if ($known -notcontains $id) { $known += $id } }
+            $baselined += $term
+            Write-Log "Baseline silenziosa per '$term': $($ids.Count) annunci registrati senza notifiche."
+        } else {
+            Write-Log "Termine '$term': 0 annunci trovati in questo giro, NON baselinato (nessuna notifica, riprovo ai prossimi giri)."
+        }
     }
 }
 
