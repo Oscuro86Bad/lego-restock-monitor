@@ -1,0 +1,39 @@
+name: CallMeBot Reopen Checker
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # ogni 4 ore (ora UTC)
+  workflow_dispatch:
+    inputs:
+      test_message:
+        description: "Invia un messaggio di TEST a Telegram"
+        type: boolean
+        default: false
+
+concurrency:
+  group: callmebot-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Recupera lo stato del ciclo precedente (baseline / "gia' avvisato")
+      - name: Restore state
+        uses: actions/cache@v4
+        with:
+          path: cbstate.json
+          key: callmebot-reopen-${{ github.run_id }}
+          restore-keys: |
+            callmebot-reopen-
+
+      - name: Check registration status
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # true solo quando lanciato a mano col flag "test_message"
+          TEST_MESSAGE: ${{ github.event.inputs && (github.event.inputs.test_message || 'false') || 'false' }}
+        run: pwsh -NoProfile -File ./callmebot-check.ps1
