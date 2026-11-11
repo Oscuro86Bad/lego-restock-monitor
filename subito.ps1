@@ -14,7 +14,8 @@ $Searches = @(
     @{ term = "76294" },
     @{ term = "lego x-mansion" },
     @{ term = "76352" },
-    @{ term = "21302" }
+    @{ term = "21302" },
+    @{ term = "Lego" }
 )
 $SearchUrl = "https://www.subito.it/annunci-italia/vendita/usato/?q={0}"
 $StateFile = "./subito-state.json"
