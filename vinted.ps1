@@ -70,6 +70,14 @@ foreach ($s in $Searches) {
 $allIds = @($foundItems.Keys)
 Write-Log "Totale item validi: $($allIds.Count)"
 
+# Guardia anti-annunci-vecchi: gli id Vinted sono progressivi globali, quindi un
+# annuncio VERAmente nuovo ha un id vicino al massimo del giro. Vinted inietta nel
+# feed anche annunci vecchi (sponsorizzati/rilevanza) che risalgono in pagina:
+# quelli con id sotto la soglia si registrano in silenzio, MAI notificati.
+$runMaxId = 0
+foreach ($k in @($foundItems.Keys)) { $v = 0; if ([long]::TryParse($k, [ref]$v) -and $v -gt $runMaxId) { $runMaxId = $v } }
+$MinIdFloor = $runMaxId - 2000000   # ~soglia: sotto = annuncio vecchio
+
 # ---- Baseline completamente primo run: registra e non notifica ----
 # NOTA: baseliniamo SOLO i termini che hanno effettivamente restituito annunci:
 # un termine fallito (es. Vinted bloccato) NON va baselinato a vuoto, altrimenti
@@ -93,6 +101,14 @@ foreach ($s in $Searches) {
     if ($baselined -contains $term) {
         # ricerca gia' attiva: notifica solo annunci nuovi
         $news = @($ids | Where-Object { $known -notcontains $_ })
+        # guardia eta': separa i nuovi vera-mente recenti dagli annunci vecchi
+        # (risaliti in pagina / iniettati): i vecchi si registrano in silenzio.
+        $stale = @($news | Where-Object { $runMaxId -gt 0 -and [long]$_ -lt $MinIdFloor })
+        if ($stale.Count -gt 0) {
+            foreach ($id in $stale) { if ($known -notcontains $id) { $known += $id } }
+            Write-Log "Scartati $($stale.Count) annunci vecchi (id < $MinIdFloor) per '$term': registrati in silenzio."
+        }
+        $news = @($news | Where-Object { $stale -notcontains $_ })
         if ($news.Count -gt $MaxNotPerRun) {
             # TROPPI "nuovi" in un solo giro per una ricerca gia' baseline:
             # quasi certamente lo stato si e' perduto/rigenerato (cache evasa).
