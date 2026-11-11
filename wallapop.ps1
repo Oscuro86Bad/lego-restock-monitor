@@ -13,7 +13,6 @@
 #   i termini con la regex: term = "..." (stesso schema di subito.ps1/vinted.ps1).
 
 $Searches = @(
-    @{ term = "..." },
     @{ term = "76294" },
     @{ term = "lego x-mansion" },
     @{ term = "76352" },
