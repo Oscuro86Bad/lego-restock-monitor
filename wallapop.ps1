@@ -15,5 +15,6 @@
 $Searches = @(
     @{ term = "76294" },
     @{ term = "lego x-mansion" },
-    @{ term = "76352" }
+    @{ term = "76352" },
+    @{ term = "Lego stranger Things" }
 )
