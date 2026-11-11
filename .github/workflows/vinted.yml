@@ -19,10 +19,10 @@ jobs:
       - name: Restore listings state
         uses: actions/cache@v4
         with:
-          path: vinted-state.json
-          key: vinted-listings-76294-${{ github.run_id }}
+          path: vinted-state2.json
+          key: vinted-listings-v2-${{ github.run_id }}
           restore-keys: |
-            vinted-listings-76294-
+            vinted-listings-v2-
 
       - name: Check Vinted new listings
         env:
