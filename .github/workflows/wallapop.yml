@@ -1,0 +1,50 @@
+name: Wallapop Listings Monitor (cloud API)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # fallback (GitHub lo rallenta, il loop self-dispatch fa il ritmo reale)
+  workflow_dispatch:
+    inputs:
+      test_message:
+        description: "Invia un messaggio di TEST a Telegram"
+        type: boolean
+        default: false
+
+concurrency:
+  group: wallapop-listings-monitor
+  cancel-in-progress: false
+
+jobs:
+  wallapop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore listings state
+        uses: actions/cache@v4
+        with:
+          path: wallapop_state.json
+          key: wallapop-listings-${{ github.run_id }}
+          restore-keys: |
+            wallapop-listings-
+
+      - name: Check Wallapop new listings
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_MESSAGE: ${{ github.event.inputs && (github.event.inputs.test_message || 'false') || 'false' }}
+        run: pwsh -NoProfile -File ./wallapop.ps1
+
+      # GitHub rallenta i cron schedulati: auto-lancio del run successivo (~5 min reali)
+      - name: Loop (next check in ~4 min)
+        env:
+          TRIGGER_TOKEN: ${{ secrets.SELF_TRIGGER_TOKEN }}
+        run: |
+          sleep 240
+          curl -s -X POST \
+            -H "Authorization: token $TRIGGER_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/wallapop.yml/dispatches" \
+            -d '{"ref":"main"}' > /dev/null
+          echo "Prossima verifica programmata."
