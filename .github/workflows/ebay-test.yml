@@ -7,24 +7,32 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test scraping ebay.it da runner
+      - name: Test varianti scraping eBay da runner
         shell: pwsh
         run: |
           $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
-          try {
-            $r = Invoke-WebRequest -Uri "https://www.ebay.it/sch/i.html?_nkw=lego+76294&_sop=10" -Headers @{ "User-Agent" = $UA } -UseBasicParsing -TimeoutSec 60
-            Write-Host "HTTP $($r.StatusCode) - lunghezza contenuto: $($r.Content.Length)"
-            $ids = [regex]::Matches($r.Content, '/itm/(\d{9,15})')
-            Write-Host "item id trovati: $($ids.Count)"
-            $uniq = @($ids | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique -First 5)
-            Write-Host "esempi id: $($uniq -join ', ')"
-            $prices = [regex]::Matches($r.Content, '(\d{1,6}[,.]\d{2})\s*(?:&nbsp;)?\s*EUR|EUR\s*(\d{1,6}[,.]\d{2})')
-            Write-Host "prezzi trovati: $($prices.Count)"
-            $caps = [regex]::Matches($r.Content, 'class="s-item__title"[\s\S]{0,200}?>([^<]{5,120})<')
-            Write-Host "titoli s-item: $($caps.Count)"
-            $caps | Select-Object -First 5 | ForEach-Object { Write-Host ("- " + $_.Groups[1].Value) }
-          } catch {
-            Write-Host "SCRAPING KO: $($_.Exception.Message)"
-            if ($_.Exception.Response) { Write-Host "HTTP $([int]$_.Exception.Response.StatusCode)" }
-            exit 1
+          $UAmob = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36"
+          $tests = @(
+            @{ nome = "ebay.it + UA desktop";        url = "https://www.ebay.it/sch/i.html?_nkw=lego+76294&_sop=10"; ua = $UA },
+            @{ nome = "ebay.com + UA desktop";       url = "https://www.ebay.com/sch/i.html?_nkw=lego+76294&_sop=10"; ua = $UA },
+            @{ nome = "ebay.it mobile m.ebay.it";    url = "https://m.ebay.it/sch/i.html?_nkw=lego+76294"; ua = $UAmob },
+            @{ nome = "ebay.it + header completi";   url = "https://www.ebay.it/sch/i.html?_nkw=lego+76294"; ua = $UA; extra = $true }
+          )
+          foreach ($t in $tests) {
+            $h = @{ "User-Agent" = $t.ua; "Accept-Language" = "it-IT,it;q=0.9"; "Accept" = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
+            if ($t.extra) {
+              $h["Upgrade-Insecure-Requests"] = "1"
+              $h["Sec-Fetch-Dest"] = "document"
+              $h["Sec-Fetch-Mode"] = "navigate"
+              $h["Sec-Fetch-Site"] = "none"
+            }
+            try {
+              $r = Invoke-WebRequest -Uri $t.url -Headers $h -UseBasicParsing -TimeoutSec 45
+              $ids = [regex]::Matches($r.Content, '/itm/(\d{9,15})')
+              Write-Host ("{0} -> HTTP {1}, {2} byte, item id: {3}" -f $t.nome, $r.StatusCode, $r.Content.Length, $ids.Count)
+            } catch {
+              $code = ""
+              try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+              Write-Host ("{0} -> KO HTTP {1}" -f $t.nome, $code)
+            }
           }
