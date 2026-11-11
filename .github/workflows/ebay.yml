@@ -1,0 +1,45 @@
+name: eBay Listings Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # fallback (GitHub lo rallenta, il loop self-dispatch fa il ritmo reale)
+  workflow_dispatch: {}
+
+concurrency:
+  group: ebay-monitor
+  cancel-in-progress: false
+
+jobs:
+  ebay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore state
+        uses: actions/cache@v4
+        with:
+          path: ebay-state.json
+          key: ebay-state-${{ github.run_id }}
+          restore-keys: |
+            ebay-state-
+
+      - name: Check eBay new listings
+        env:
+          TRIGGER_TOKEN: ${{ secrets.TRIGGER_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pwsh -NoProfile -File ./ebay-monitor.ps1
+
+      # GitHub rallenta i cron schedulati: auto-lancio del run successivo (~5 min reali)
+      - name: Loop (next check in ~4 min)
+        env:
+          TRIGGER_TOKEN: ${{ secrets.TRIGGER_TOKEN }}
+        run: |
+          sleep 240
+          curl -s -X POST \
+            -H "Authorization: token $TRIGGER_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/ebay.yml/dispatches" \
+            -d '{"ref":"main"}' > /dev/null
+          echo "Prossima verifica programmata."
