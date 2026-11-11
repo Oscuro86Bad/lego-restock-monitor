@@ -7,32 +7,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test varianti scraping eBay da runner
-        shell: pwsh
+      - name: Test curl_cffi (fingerprint TLS Chrome) su eBay da runner
         run: |
-          $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
-          $UAmob = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36"
-          $tests = @(
-            @{ nome = "ebay.it + UA desktop";        url = "https://www.ebay.it/sch/i.html?_nkw=lego+76294&_sop=10"; ua = $UA },
-            @{ nome = "ebay.com + UA desktop";       url = "https://www.ebay.com/sch/i.html?_nkw=lego+76294&_sop=10"; ua = $UA },
-            @{ nome = "ebay.it mobile m.ebay.it";    url = "https://m.ebay.it/sch/i.html?_nkw=lego+76294"; ua = $UAmob },
-            @{ nome = "ebay.it + header completi";   url = "https://www.ebay.it/sch/i.html?_nkw=lego+76294"; ua = $UA; extra = $true }
-          )
-          foreach ($t in $tests) {
-            $h = @{ "User-Agent" = $t.ua; "Accept-Language" = "it-IT,it;q=0.9"; "Accept" = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
-            if ($t.extra) {
-              $h["Upgrade-Insecure-Requests"] = "1"
-              $h["Sec-Fetch-Dest"] = "document"
-              $h["Sec-Fetch-Mode"] = "navigate"
-              $h["Sec-Fetch-Site"] = "none"
-            }
-            try {
-              $r = Invoke-WebRequest -Uri $t.url -Headers $h -UseBasicParsing -TimeoutSec 45
-              $ids = [regex]::Matches($r.Content, '/itm/(\d{9,15})')
-              Write-Host ("{0} -> HTTP {1}, {2} byte, item id: {3}" -f $t.nome, $r.StatusCode, $r.Content.Length, $ids.Count)
-            } catch {
-              $code = ""
-              try { $code = [int]$_.Exception.Response.StatusCode } catch { }
-              Write-Host ("{0} -> KO HTTP {1}" -f $t.nome, $code)
-            }
-          }
+          pip install curl_cffi -q
+          python3 - <<'EOF'
+          from curl_cffi import requests
+          import re
+
+          url = "https://www.ebay.it/sch/i.html?_nkw=lego+76294&_sop=10"
+          for target in ["chrome", "chrome131", "safari", "firefox"]:
+              try:
+                  r = requests.get(url, impersonate=target, timeout=45,
+                                   headers={"Accept-Language": "it-IT,it;q=0.9"})
+                  ids = re.findall(r"/itm/(\d{9,15})", r.text)
+                  uniq = list(dict.fromkeys(ids))[:5]
+                  print(f"{target} -> HTTP {r.status_code}, {len(r.text)} byte, item id: {len(ids)}, esempi: {','.join(uniq)}")
+              except Exception as e:
+                  print(f"{target} -> KO: {e}")
+          EOF
