@@ -8,7 +8,7 @@ $Searches = @(
     @{ term = "21302" },
     @{ term = "76352" },
     @{ term = "31199" },
-    @{ term = "6866" }
+    @{ term = "Lego 6866" }
 )
 $StateFile = "./vinted-state2.json"   # v2: nuovo file perche' e' cambiato l'ordine dei risultati (newest_first) -> re-baseline silenziosa
 $MaxNotPerRun = 20   # anti-spam: massimo notifiche per giro (il resto slitta al giro dopo)
