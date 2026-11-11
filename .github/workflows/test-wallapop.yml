@@ -1,0 +1,28 @@
+name: Wallapop API Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test api.wallapop.com from Actions runner
+        run: |
+          echo "=== 1) GET /api/v3/search ==="
+          curl -sS -o /tmp/w1.json -w "HTTP %{http_code}\n" \
+            "https://api.wallapop.com/api/v3/search?source=search_box&keywords=lego&latitude=40.4168&longitude=-3.7038&order_by=most_relevance" \
+            -H "X-DeviceOS: 0" \
+            -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
+            -H "Accept: application/json, text/plain, */*" || true
+          echo "--- corpo (primi 500 byte) ---"
+          head -c 500 /tmp/w1.json; echo
+
+      - name: Test es.wallapop.com (web) from Actions runner
+        run: |
+          echo "=== 2) GET es.wallapop.com/app/search ==="
+          curl -sS -o /tmp/w2.html -w "HTTP %{http_code}\n" \
+            "https://es.wallapop.com/app/search?keywords=lego" \
+            -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" || true
+          echo "--- corpo (primi 300 byte) ---"
+          head -c 300 /tmp/w2.html; echo
