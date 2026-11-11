@@ -1,4 +1,4 @@
-﻿# Wallapop Listings Monitor - versione CLOUD per GitHub Actions
+# Wallapop Listings Monitor - versione CLOUD per GitHub Actions
 # Uso l'API ufficiale https://api.wallapop.com/api/v3/search:
 #  - NON richiede device-fingerprint (verificato 2026-11-11, header banali bastano)
 #  - NON e' geo-bloccata dai runner GitHub Actions (test: HTTP 200 da ubuntu runner)
@@ -12,7 +12,8 @@
 
 $Searches = @(
     @{ term = "76352" },
-    @{ term = "Lego stranger Things" }
+    @{ term = "Lego stranger Things" },
+    @{ term = "6866" }
 )
 
 $ErrorActionPreference = "Stop"
