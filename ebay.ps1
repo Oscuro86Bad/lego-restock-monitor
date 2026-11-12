@@ -2,5 +2,5 @@
 
 $Searches = @(
     @{ term = "6866 lego" },
-    @{ term = "31199" }
+    @{ term = "31199 lego" }
 )
