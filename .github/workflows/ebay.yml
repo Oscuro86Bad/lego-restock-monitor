@@ -36,11 +36,11 @@ jobs:
       # GitHub rallenta i cron schedulati: auto-lancio del run successivo (~5 min reali)
       - name: Loop (next check in ~4 min)
         env:
-          TRIGGER_TOKEN: ${{ secrets.TRIGGER_TOKEN }}
+          SELF_TRIGGER_TOKEN: ${{ secrets.SELF_TRIGGER_TOKEN }}
         run: |
           sleep 240
           curl -s -X POST \
-            -H "Authorization: token $TRIGGER_TOKEN" \
+            -H "Authorization: token $SELF_TRIGGER_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/ebay.yml/dispatches" \
             -d '{"ref":"main"}' > /dev/null
