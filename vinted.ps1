@@ -9,7 +9,6 @@ $Searches = @(
     @{ term = "76352" },
     @{ term = "31199" },
     @{ term = "Lego 6866" },
-    @{ term = "Tiger 2"; image = "05_005d5_bZ7gwoRM6WFLB7PrG6JeknaQ" },
     @{ term = "76194" }
 )
 # Le chiavi possono anche essere FOTO (ricerca per immagine Vinted), aggiunte dall'app:
