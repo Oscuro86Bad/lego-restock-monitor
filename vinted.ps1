@@ -10,6 +10,12 @@ $Searches = @(
     @{ term = "31199" },
     @{ term = "Lego 6866" }
 )
+# Le chiavi possono anche essere FOTO (ricerca per immagine Vinted), aggiunte dall'app:
+#     @{ term = "<etichetta>"; image = "<search_by_image_id>" }
+# Per le chiavi-foto la ricerca usa catalog?search_by_image_id=<id> (stessa pagina catalogo,
+# risultati identici, order=newest_first funziona anche li'). Il caricamento della foto
+# avviene dal telefono dentro l'app (host api.vinted.it e' protetto da Cloudflare:
+# upload impossibile dal cloud, ma la PAGINA risultati e' leggibile senza browser).
 $StateFile = "./vinted-state2.json"   # v2: nuovo file perche' e' cambiato l'ordine dei risultati (newest_first) -> re-baseline silenziosa
 $MaxNotPerRun = 20   # anti-spam: massimo notifiche per giro (il resto slitta al giro dopo)
 $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
@@ -38,7 +44,12 @@ $okTerms = @()   # termini con almeno 1 annuncio trovato in QUESTO giro
 
 foreach ($s in $Searches) {
     try {
-        $url = "https://www.vinted.it/catalog?search_text=$([uri]::EscapeDataString($s.term))&order=newest_first"
+        if ($s.ContainsKey("image") -and $s.image) {
+            # CHIAVE-FOTO: ricerca per immagine (aggiunta dall'app Android)
+            $url = "https://www.vinted.it/catalog?search_by_image_id=$([uri]::EscapeDataString($s.image))&order=newest_first"
+        } else {
+            $url = "https://www.vinted.it/catalog?search_text=$([uri]::EscapeDataString($s.term))&order=newest_first"
+        }
         $resp = Invoke-WebRequest -Uri $url -Headers @{ "User-Agent" = $UA } -UseBasicParsing -TimeoutSec 60
         $c = $resp.Content
         $anchors = [regex]::Matches($c, 'data-testid="product-item-id-(\d+)"')
@@ -61,7 +72,8 @@ foreach ($s in $Searches) {
             $termIds[$s.term] = @($termIds[$s.term]) + $id
         }
         if ($termIds.ContainsKey($s.term) -and @($termIds[$s.term]).Count -gt 0) { $okTerms = @($okTerms) + $s.term }
-        Write-Log "Ricerca '$($s.term)': $($anchors.Count) item."
+        $tipo = if ($s.ContainsKey("image") -and $s.image) { "foto" } else { "testo" }
+        Write-Log "Ricerca '$($s.term)' ($tipo): $($anchors.Count) item."
     } catch {
         Write-Log "ERRORE ricerca '$($s.term)': $($_.Exception.Message)"
     }
