@@ -1,1 +1,1 @@
-2026-11-13T10:47:05.447Z | ERRORE upload: test diagnostica v1.16
+2026-11-13T10:48:20.568Z | OK chiave-foto registrata, id=02_0041d_sVLVxPHaxECwn4SaWz4D9MWN
