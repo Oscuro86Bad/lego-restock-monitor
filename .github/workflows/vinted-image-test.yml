@@ -1,0 +1,63 @@
+name: Vinted Image Search Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test image upload + catalog results
+        env:
+          UA: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          $img = Get-Item ./test-photo.jpg
+
+          # --- Variante A: host API dedicato ---
+          try {
+            $form = @{ stream = $img; photo_type = "query_image" }
+            $r = Invoke-RestMethod -Uri "https://api.vinted.it/images/public/api/v2/images" -Method Post -Form $form `
+              -Headers @{ "User-Agent" = $env:UA; "Accept" = "application/json"; "Origin" = "https://www.vinted.it"; "Referer" = "https://www.vinted.it/"; "Platform" = "web"; "X-Next-App" = "marketplace-web" } `
+              -TimeoutSec 60
+            Write-Host "UPLOAD A OK - risposta: $($r | ConvertTo-Json -Depth 5 -Compress)"
+            $id = $r.id
+          } catch {
+            Write-Host "UPLOAD A KO: $($_.Exception.Message)"
+            if ($_.ErrorDetails.Message) { Write-Host ("Body: " + $_.ErrorDetails.Message) }
+            $id = $null
+          }
+
+          if ($id) {
+            Write-Host "image id: $id"
+            try {
+              $q = Invoke-RestMethod -Uri "https://api.vinted.it/search-bar/query-image?image_id=$id" `
+                -Headers @{ "User-Agent" = $env:UA; "Accept" = "application/json" } -TimeoutSec 30
+              Write-Host "QUERY-IMAGE OK: $($q | ConvertTo-Json -Depth 5 -Compress)"
+            } catch { Write-Host "QUERY-IMAGE KO: $($_.Exception.Message)" }
+
+            try {
+              $cat = Invoke-WebRequest -Uri "https://www.vinted.it/catalog?search_by_image_id=$id&order=newest_first" `
+                -Headers @{ "User-Agent" = $env:UA } -UseBasicParsing -TimeoutSec 90
+              $anchors = [regex]::Matches($cat.Content, 'data-testid="product-item-id-(\d+)"')
+              Write-Host "CATALOG OK (HTTP $($cat.StatusCode), $($cat.Content.Length) byte) - item trovati: $($anchors.Count)"
+              $anchors | Select-Object -First 3 | ForEach-Object { Write-Host ("  id: " + $_.Groups[1].Value) }
+            } catch {
+              Write-Host "CATALOG KO: $($_.Exception.Message)"
+            }
+          }
+
+          # --- Variante B: gateway via www (fallback) ---
+          try {
+            $form2 = @{ stream = $img; photo_type = "query_image" }
+            $r2 = Invoke-RestMethod -Uri "https://www.vinted.it/web/gateway/images/public/api/v2/images" -Method Post -Form $form2 `
+              -Headers @{ "User-Agent" = $env:UA; "Accept" = "application/json"; "Origin" = "https://www.vinted.it"; "Referer" = "https://www.vinted.it/" } `
+              -TimeoutSec 60
+            Write-Host "UPLOAD B OK - risposta: $($r2 | ConvertTo-Json -Depth 5 -Compress)"
+          } catch {
+            Write-Host "UPLOAD B KO: $($_.Exception.Message)"
+            if ($_.ErrorDetails.Message) { Write-Host ("Body: " + $_.ErrorDetails.Message) }
+          }
