@@ -13,7 +13,8 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 $Searches = @(
     @{ term = "76352" },
     @{ term = "21302" },
-    @{ term = "6866" }
+    @{ term = "6866" },
+    @{ term = "76194" }
 )
 $SearchUrl = "https://www.subito.it/annunci-italia/vendita/usato/?q={0}"
 $StateFile = "./subito-state.json"
