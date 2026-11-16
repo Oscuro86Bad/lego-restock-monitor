@@ -35,6 +35,18 @@ function Esc {
     return ([string]$s).Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 }
 
+# Soglia di prezzo della chiave: $s.max (numero o stringa). 0 = nessuna soglia.
+function Get-Soglia {
+    param($s)
+    if ($s.ContainsKey('max') -and $null -ne $s.max -and "$($s.max)" -ne '') {
+        try {
+            $v = [double]([string]$s.max)
+            if ($v -ge 0) { return $v }
+        } catch {}
+    }
+    return 0
+}
+
 Write-Log "--- eBay scan $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC ---"
 
 # ---- ricerche gestite dall'app (ebay.ps1 contiene il blocco $Searches) ----
@@ -115,11 +127,14 @@ foreach ($s in @($Searches)) {
             $id = [string]$it.itemId
             if ($termIds[$term] -notcontains $id) { $termIds[$term] = @($termIds[$term]) + $id }
             if ($foundItems.ContainsKey($id)) { continue }
+            $pn = -1
+            try { $pn = [double]([string]$it.price.value) } catch { $pn = -1 }
             $foundItems[$id] = @{
-                title    = [string]$it.title
-                price    = "$($it.price.value) $($it.price.currency)"
-                link     = [string]$it.itemWebUrl
-                created  = [string]$it.itemCreationDate
+                title      = [string]$it.title
+                price      = "$($it.price.value) $($it.price.currency)"
+                prezzoNum  = $pn
+                link       = [string]$it.itemWebUrl
+                created    = [string]$it.itemCreationDate
             }
         }
     } catch {
@@ -166,6 +181,23 @@ foreach ($s in @($Searches)) {
             Write-Log "Scartati $($old.Count) annunci vecchi (>$MaxAgeHours h) per '$term': registrati in silenzio."
         }
         $news = $recent
+        # SOGLIA PREZZO (opzionale, $s.max): solo annunci con prezzo (senza spese/tasse)
+        # uguale o inferiore alla soglia. Gli annunci sopra soglia o senza prezzo
+        # interpretabile si registrano in silenzio, MAI notificati.
+        $maxP = Get-Soglia $s
+        if ($maxP -gt 0) {
+            $recent2 = @()
+            $cari = @()
+            foreach ($id in $news) {
+                $pv = [double]$foundItems[$id].prezzoNum
+                if ($pv -lt 0 -or $pv -gt $maxP) { $cari += $id } else { $recent2 += $id }
+            }
+            if ($cari.Count -gt 0) {
+                foreach ($id in $cari) { if ($known -notcontains $id) { $known += $id } }
+                Write-Log "Scartati $($cari.Count) annunci sopra la soglia di $maxP euro per '$term': registrati in silenzio."
+            }
+            $news = $recent2
+        }
         if ($news.Count -gt 30) {
             # TROPPI nuovi su ricerca gia' baseline: probabile perdita di stato -> re-baseline
             Write-Log "ATTENZIONE: $($news.Count) nuovi per '$term' su ricerca gia' baseline: re-baseline silenziosa, nessuna notifica."

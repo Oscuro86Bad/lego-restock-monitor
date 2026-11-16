@@ -53,6 +53,19 @@ function Esc {
     return $s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 }
 
+# Soglia di prezzo della chiave: $s.max (numero o stringa). 0 = nessuna soglia.
+# Notifica SOLO annunci con prezzo (senza spese) <= max. Senza max = tutti.
+function Get-Soglia {
+    param($s)
+    if ($s -and $s.ContainsKey('max') -and $null -ne $s.max -and "$($s.max)" -ne '') {
+        try {
+            $v = [double]([string]$s.max)
+            if ($v -ge 0) { return $v }
+        } catch {}
+    }
+    return 0
+}
+
 Write-Log "--- Controllo Wallapop $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC ---"
 
 # Modalita' test: invia messaggio di prova via Telegram ed esce
@@ -94,6 +107,18 @@ foreach ($s in $Searches) {
         if ($OnlyShippable -and -not $it.shipping.item_is_shippable) { continue }
         if (-not $seen.ContainsKey([string]$it.id)) {
             $seen[[string]$it.id] = $true
+            # SOGLIA PREZZO (opzionale, $s.max): solo annunci con prezzo (senza spese)
+            # uguale o inferiore alla soglia. Sopra soglia o senza prezzo: registra
+            # (gia' visto) ma MAI notifica.
+            $maxP = Get-Soglia $s
+            if ($maxP -gt 0) {
+                $pv = -1
+                try { $pv = [double]$it.price.amount } catch { $pv = -1 }
+                if ($pv -lt 0 -or $pv -gt $maxP) {
+                    Write-Log ("Soglia " + $maxP + " euro per '" + $s.term + "': scartato '" + $it.title + "' (prezzo " + $pv + ").")
+                    continue
+                }
+            }
             $allNew.Add(@{ item = $it; term = [string]$s.term })
         }
     }

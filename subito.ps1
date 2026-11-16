@@ -16,12 +16,44 @@ $Searches = @(
     @{ term = "6866" },
     @{ term = "71858" }
 )
+# SOGLIA DI PREZZO (opzionale): @{ term = "..."; max = 50 }
+# -> notifica SOLO annunci con prezzo (senza spese/tasse) <= max. Senza max = tutti.
 $SearchUrl = "https://www.subito.it/annunci-italia/vendita/usato/?q={0}"
 $StateFile = "./subito-state.json"
 $MaxNotPerRun = 20   # anti-spam: massimo notifiche per giro (il resto slitta al giro dopo)
 $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
 
 function Write-Log { param([string]$m); Write-Output $m }
+
+# Converte una stringa prezzo (formati vari: "800", "12,50", "1.250,00", "800 EUR") in numero.
+# Ritorna -1 se non interpretabile.
+function Get-PrezzoNum {
+    param([string]$p)
+    if (-not $p) { return -1 }
+    $s = ([string]$p) -replace '[^0-9,\.\-]', ''
+    if (-not $s) { return -1 }
+    if ($s.Contains(',') -and $s.Contains('.')) {
+        $s = $s.Replace('.', '').Replace(',', '.')
+    } elseif ($s.Contains(',')) {
+        $s = $s.Replace(',', '.')
+    } elseif ($s.Contains('.')) {
+        $part = ($s -split '\.')[-1]
+        if ($part.Length -ne 2) { $s = $s.Replace('.', '') }
+    }
+    $v = [double]0
+    if ([double]::TryParse($s, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$v)) { return $v }
+    return -1
+}
+
+# Soglia di prezzo della chiave: $s.max (numero o stringa). 0 = nessuna soglia.
+function Get-Soglia {
+    param($s)
+    if ($s.ContainsKey('max') -and $null -ne $s.max -and "$($s.max)" -ne '') {
+        $v = Get-PrezzoNum ([string]$s.max)
+        if ($v -ge 0) { return $v }
+    }
+    return 0
+}
 
 function Send-Telegram {
     param([string]$Text)
@@ -111,6 +143,22 @@ foreach ($s in $Searches) {
     if ($baselined -contains $term) {
         # ricerca gia' attiva: notifica solo annunci nuovi
         $news = @($ids | Where-Object { $known -notcontains $_ })
+        # SOGLIA PREZZO (opzionale, $s.max): solo annunci con prezzo (senza spese/tasse)
+        # uguale o inferiore alla soglia. Gli annunci sopra soglia o senza prezzo
+        # interpretabile si registrano in silenzio, MAI notificati.
+        $maxP = Get-Soglia $s
+        if ($maxP -gt 0) {
+            $cari = @($news | Where-Object {
+                $pv = Get-PrezzoNum ([string]$foundItems[$_].price)
+                if ($pv -lt 0) { return $true }
+                return ($pv -gt $maxP)
+            })
+            if ($cari.Count -gt 0) {
+                foreach ($id in $cari) { if ($known -notcontains $id) { $known += $id } }
+                Write-Log "Scartati $($cari.Count) annunci sopra la soglia di $maxP euro per '$term': registrati in silenzio."
+            }
+            $news = @($news | Where-Object { $cari -notcontains $_ })
+        }
         if ($news.Count -gt $MaxNotPerRun) {
             # TROPPI "nuovi" per una ricerca gia' baseline: probabile perdita di stato
             # (cache evasa/rigenerata). Re-baseline silenziosa: ZERO notifiche.

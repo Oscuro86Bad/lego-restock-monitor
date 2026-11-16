@@ -13,6 +13,8 @@ $Searches = @(
 )
 # Le chiavi possono anche essere FOTO (ricerca per immagine Vinted), aggiunte dall'app:
 #     @{ term = "<etichetta>"; image = "<search_by_image_id>" }
+# SOGLIA DI PREZZO (tutte le piattaforme, opzionale): @{ term = "..."; max = 50 }
+# -> notifica SOLO annunci con prezzo (senza spese/tasse) <= max. Senza max = tutti.
 # Per le chiavi-foto la ricerca usa catalog?search_by_image_id=<id> (stessa pagina catalogo,
 # risultati identici, order=newest_first funziona anche li'). Il caricamento della foto
 # avviene dal telefono dentro l'app (host api.vinted.it e' protetto da Cloudflare:
@@ -22,6 +24,38 @@ $MaxNotPerRun = 20   # anti-spam: massimo notifiche per giro (il resto slitta al
 $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
 
 function Write-Log { param([string]$m); Write-Output $m }
+
+# Converte una stringa prezzo (formati vari: "399.00", "12,50", "1.250,00", "800 EUR") in numero.
+# Ritorna -1 se non interpretabile.
+function Get-PrezzoNum {
+    param([string]$p)
+    if (-not $p) { return -1 }
+    $s = ([string]$p) -replace '[^0-9,\.\-]', ''
+    if (-not $s) { return -1 }
+    if ($s.Contains(',') -and $s.Contains('.')) {
+        # entrambi: punto = migliaia, virgola = decimali (formato italiano)
+        $s = $s.Replace('.', '').Replace(',', '.')
+    } elseif ($s.Contains(',')) {
+        $s = $s.Replace(',', '.')
+    } elseif ($s.Contains('.')) {
+        # solo punto: decimale se l'ultima parte ha 2 cifre, migliaia se ne ha 3+
+        $part = ($s -split '\.')[-1]
+        if ($part.Length -ne 2) { $s = $s.Replace('.', '') }
+    }
+    $v = [double]0
+    if ([double]::TryParse($s, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$v)) { return $v }
+    return -1
+}
+
+# Soglia di prezzo della chiave: $s.max (numero o stringa). 0 = nessuna soglia.
+function Get-Soglia {
+    param($s)
+    if ($s.ContainsKey('max') -and $null -ne $s.max -and "$($s.max)" -ne '') {
+        $v = Get-PrezzoNum ([string]$s.max)
+        if ($v -ge 0) { return $v }
+    }
+    return 0
+}
 
 function Send-Telegram {
     param([string]$Text)
@@ -122,6 +156,22 @@ foreach ($s in $Searches) {
             Write-Log "Scartati $($stale.Count) annunci vecchi (id < $MinIdFloor) per '$term': registrati in silenzio."
         }
         $news = @($news | Where-Object { $stale -notcontains $_ })
+        # SOGLIA PREZZO (opzionale, $s.max): solo annunci con prezzo (senza spese/tasse)
+        # uguale o inferiore alla soglia. Gli annunci sopra soglia o senza prezzo
+        # interpretabile si registrano in silenzio, MAI notificati.
+        $maxP = Get-Soglia $s
+        if ($maxP -gt 0) {
+            $cari = @($news | Where-Object {
+                $pv = Get-PrezzoNum ([string]$foundItems[$_].price)
+                if ($pv -lt 0) { return $true }   # prezzo non interpretabile: non puo' confermare la soglia -> non notificare
+                return ($pv -gt $maxP)
+            })
+            if ($cari.Count -gt 0) {
+                foreach ($id in $cari) { if ($known -notcontains $id) { $known += $id } }
+                Write-Log "Scartati $($cari.Count) annunci sopra la soglia di $maxP euro per '$term': registrati in silenzio."
+            }
+            $news = @($news | Where-Object { $cari -notcontains $_ })
+        }
         if ($news.Count -gt $MaxNotPerRun) {
             # TROPPI "nuovi" in un solo giro per una ricerca gia' baseline:
             # quasi certamente lo stato si e' perduto/rigenerato (cache evasa).
