@@ -8,7 +8,8 @@ $Searches = @(
     @{ term = "31199" },
     @{ term = "71858" },
     @{ term = "Lego 6866"; max = 100 },
-    @{ term = "21302"; max = 100 }
+    @{ term = "21302"; max = 100 },
+    @{ term = "76352"; max = 65 }
 )
 # Le chiavi possono anche essere FOTO (ricerca per immagine Vinted), aggiunte dall'app:
 #     @{ term = "<etichetta>"; image = "<search_by_image_id>" }
