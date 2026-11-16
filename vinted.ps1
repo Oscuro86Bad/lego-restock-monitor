@@ -5,7 +5,6 @@
 $ErrorActionPreference = "Stop"
 
 $Searches = @(
-    @{ term = "76352" },
     @{ term = "31199" },
     @{ term = "71858" },
     @{ term = "Lego 6866"; max = 100 },
