@@ -13,7 +13,8 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 $Searches = @(
     @{ term = "21302" },
     @{ term = "6866" },
-    @{ term = "71858" }
+    @{ term = "71858" },
+    @{ term = "76352"; max = 65 }
 )
 # SOGLIA DI PREZZO (opzionale): @{ term = "..."; max = 50 }
 # -> notifica SOLO annunci con prezzo (senza spese/tasse) <= max. Senza max = tutti.
