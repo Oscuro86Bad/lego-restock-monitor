@@ -11,7 +11,6 @@
 # Le credenziali arrivano dai secrets TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID.
 
 $Searches = @(
-    @{ term = "76352" },
     @{ term = "Lego stranger Things" },
     @{ term = "6866" },
     @{ term = "71858" }
