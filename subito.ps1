@@ -12,7 +12,6 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 
 $Searches = @(
     @{ term = "21302" },
-    @{ term = "6866" },
     @{ term = "71858" }
 )
 # SOGLIA DI PREZZO (opzionale): @{ term = "..."; max = 50 }
